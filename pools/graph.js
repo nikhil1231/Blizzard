@@ -1,4 +1,4 @@
-import { encodeVertex, decodeVertex } from './utils.js';
+import { DEX_INFO, encodeVertex, decodeVertex } from './utils.js';
 
 class Edge {
   constructor(e, v, weight) {
@@ -85,7 +85,8 @@ export const getCycles = (source, priceSets, dexes) => {
   for (const priceSet of priceSets) {
     for (const [t1, t2s] of Object.entries(priceSet.pairs)) {
       for (const [t2, price] of Object.entries(t2s)) {
-        edges.push(new Edge(encodeVertex(t1, priceSet.dex), encodeVertex(t2, priceSet.dex), -Math.log(price)))
+        const priceWithFee = price * (1 - DEX_INFO[priceSet.dex].fee)
+        edges.push(new Edge(encodeVertex(t1, priceSet.dex), encodeVertex(t2, priceSet.dex), -Math.log(priceWithFee)))
       }
     }
   }

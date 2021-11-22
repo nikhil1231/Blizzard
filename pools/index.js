@@ -1,18 +1,7 @@
 import { getPairs } from './request.js';
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { getCycles } from './graph.js'
-import { decodeVertex } from './utils.js';
-
-const DEX_INFO = {
-  JOE: {
-    path: './data/tj_pairs.json',
-    fee: 0.003,
-  },
-  PNG: {
-    path: './data/p_pairs.json',
-    fee: 0.003,
-  },
-}
+import { DEX_INFO, decodeVertex } from './utils.js';
 
 const DEXES = Object.keys(DEX_INFO)
 const DEX_I = {}
@@ -20,9 +9,9 @@ for (const i in DEXES) {
   DEX_I[DEXES[i]] = i
 }
 
-const getData = async (dex) => {
+const getData = async (dex, useCached=false) => {
   var pairsData
-  if (existsSync(DEX_INFO[dex].path)) {
+  if (useCached && existsSync(DEX_INFO[dex].path)) {
     pairsData = JSON.parse(readFileSync(DEX_INFO[dex].path))
   } else {
     pairsData = await getPairs(dex)()
@@ -64,7 +53,7 @@ const getProfit = (actions, priceSets) => actions.reduce((acc, action) => acc * 
 
 const createGraph = async (dataSets) => {
 
-  const priceSets = dataSets.map(pairs => pairs.slice(0, 500))
+  const priceSets = dataSets.map(pairs => pairs.slice(0, 100))
     .map((pairs, i) => processPairs(pairs, DEXES[i]))
 
   const cycles = getCycles("WAVAX", priceSets, DEXES)

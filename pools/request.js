@@ -48,7 +48,7 @@ const getPPairs = async () => {
 
 export const getPairs = (dex) => {
   return {
-    TJ: getTJPairs,
-    P: getPPairs
+    JOE: getTJPairs,
+    PNG: getPPairs
   }[dex]
 }
