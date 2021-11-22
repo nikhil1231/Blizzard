@@ -1,6 +1,6 @@
 import { DEX_INFO, encodeVertex, decodeVertex } from './utils.js';
 
-class Edge {
+export class Edge {
   constructor(e, v, weight) {
     this.to = v;
     this.weight = weight;
@@ -8,7 +8,34 @@ class Edge {
   }
 };
 
-const bellmanFord = (vertices, edges, sources) => {
+export const constructGraphParams = (priceSets) => {
+  const vertices = priceSets.map(set => Object.keys(set.pairs).map(symbol => encodeVertex(symbol, set.dex))).flat()
+  const edges = [];
+
+  for (const priceSet of priceSets) {
+    for (const [t1, t2s] of Object.entries(priceSet.pairs)) {
+      for (const [t2, price] of Object.entries(t2s)) {
+        const priceWithFee = price * (1 - DEX_INFO[priceSet.dex].fee)
+        edges.push(new Edge(encodeVertex(t1, priceSet.dex), encodeVertex(t2, priceSet.dex), -Math.log(priceWithFee)))
+      }
+    }
+  }
+
+  // Unit edge between same coin, different exchanges
+  for (const v1 of vertices) {
+    const [d1, s1] = decodeVertex(v1)
+    for (const v2 of vertices) {
+      const [d2, s2] = decodeVertex(v2)
+      if (s1 == s2 && d1 != d2) {
+        edges.push(new Edge(v1, v2, 0))
+      }
+    }
+  }
+
+  return [vertices, edges]
+}
+
+export const bellmanFord = (vertices, edges, sources) => {
   const d = {};
   const parents = {};
   for (const v of vertices) {
@@ -29,6 +56,10 @@ const bellmanFord = (vertices, edges, sources) => {
       }
     }
   }
+  return [d, parents]
+}
+
+export const findCycles = (vertices, edges, d, parents) => {
 
   // Find cycles if they exist
   let allCycles = [];
@@ -79,29 +110,9 @@ const bellmanFord = (vertices, edges, sources) => {
 
 export const getCycles = (source, priceSets, dexes) => {
 
-  const vertices = priceSets.map(set => Object.keys(set.pairs).map(symbol => encodeVertex(symbol, set.dex))).flat()
-  const edges = [];
+  const [vertices, edges] = constructGraphParams(priceSets)
 
-  for (const priceSet of priceSets) {
-    for (const [t1, t2s] of Object.entries(priceSet.pairs)) {
-      for (const [t2, price] of Object.entries(t2s)) {
-        const priceWithFee = price * (1 - DEX_INFO[priceSet.dex].fee)
-        edges.push(new Edge(encodeVertex(t1, priceSet.dex), encodeVertex(t2, priceSet.dex), -Math.log(priceWithFee)))
-      }
-    }
-  }
+  const [dists, parents] = bellmanFord(vertices, edges, dexes.map(dex => encodeVertex(source, dex)))
 
-
-  // Unit edge between same coin, different exchanges
-  for (const v1 of vertices) {
-    const [d1, s1] = decodeVertex(v1)
-    for (const v2 of vertices) {
-      const [d2, s2] = decodeVertex(v2)
-      if (s1 == s2 && d1 != d2) {
-        edges.push(new Edge(v1, v2, 0))
-      }
-    }
-  }
-
-  return bellmanFord(vertices, edges, dexes.map(dex => encodeVertex(source, dex)))
+  return findCycles(vertices, edges, dists, parents)
 }
