@@ -20,6 +20,10 @@ export const getArbActions = async (cache, source) => {
 
   const cycles = getCycles(source, cache)
 
+  if (cycles.length == 0) {
+    return []
+  }
+
   const actions = cycleToActions(cycles[0], source)
 
   // TODO: maybe add profit calculation here?

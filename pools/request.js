@@ -1,6 +1,8 @@
 import fetch from 'node-fetch';
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { DEX_INFO } from './utils.js';
+import { DEXES } from './utils.js';
+
+const DATA_PATH = './data/metadata.json'
 
 const getTJPairs = async () => {
   const res = await fetch("https://api.thegraph.com/subgraphs/name/traderjoe-xyz/exchange", {
@@ -55,13 +57,32 @@ const getPairs = (dex) => {
   }[dex]
 }
 
-export const getData = async (dex, useCached=false) => {
-  var pairsData
-  if (useCached && existsSync(DEX_INFO[dex].path)) {
-    pairsData = JSON.parse(readFileSync(DEX_INFO[dex].path))
-  } else {
-    pairsData = await getPairs(dex)()
-    writeFileSync(DEX_INFO[dex].path, JSON.stringify(pairsData))
+export const getLPMetadata = async (useCached=false) => {
+  if (useCached && existsSync(DATA_PATH)) {
+    return JSON.parse(readFileSync(DATA_PATH))
   }
-  return pairsData.data.pairs
+
+  const fetches = await Promise.all(DEXES.map(dex => getPairs(dex)()))
+
+  let data = {}
+  for (let i = 0; i < DEXES.length; i++) {
+    data[DEXES[i]] = []
+    for (const pair of fetches[i].data.pairs) {
+      data[DEXES[i]].push({
+        id: pair.id,
+        token0: {
+          id: pair.token0.id,
+          symbol: pair.token0.symbol
+        },
+        token1: {
+          id: pair.token1.id,
+          symbol: pair.token1.symbol
+        },
+      })
+    }
+  }
+
+  writeFileSync(DATA_PATH, JSON.stringify(data))
+
+  return data
 }

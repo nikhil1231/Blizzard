@@ -1,4 +1,4 @@
-import { DEX_INFO, encodeVertex, decodeVertex, addressSymbolMap } from './utils.js';
+import { DEXES, encodeVertex, decodeVertex, getAmountOut } from './utils.js';
 
 export class Edge {
   constructor(e, v, weight) {
@@ -8,28 +8,25 @@ export class Edge {
   }
 };
 
-export const subtractFee = (price, dex) => price * (1 - DEX_INFO[dex].fee)
-
-const createEdge = (dex, t0, t1, price) => {
-  const p = subtractFee(price, dex)
+const createEdge = (dex, t0, t1, p) => {
   return new Edge(encodeVertex(t0, dex), encodeVertex(t1, dex), -Math.log(p))
 }
 
 const createEdges = (dex, pair) => {
+  const priceWithfee0 = getAmountOut(1, pair.reserve1, pair.reserve0)
+  const priceWithfee1 = getAmountOut(1, pair.reserve0, pair.reserve1)
   return [
-    createEdge(dex, pair.token0.id, pair.token1.id, pair.token1Price),
-    createEdge(dex, pair.token1.id, pair.token0.id, pair.token0Price),
+    createEdge(dex, pair.token0.id, pair.token1.id, priceWithfee1),
+    createEdge(dex, pair.token1.id, pair.token0.id, priceWithfee0),
   ]
 }
 
 export const constructGraphParams = (cache, tokenAddresses) => {
-  const vertices = Object.keys(cache).map(dex => tokenAddresses.map(addr => encodeVertex(addr, dex))).flat()
+  const vertices = DEXES.map(dex => tokenAddresses.map(addr => encodeVertex(addr, dex))).flat()
   const edges = []
 
-  for (const [dex, pairs] of Object.entries(cache)) {
-    for (const pair of Object.values(pairs)) {
-      edges.push(...createEdges(dex, pair))
-    }
+  for (const [dex, pair] of cache.enumerate()) {
+    edges.push(...createEdges(dex, pair))
   }
 
   // Unit edge between same coin, different exchanges
@@ -118,9 +115,9 @@ export const findCycles = (vertices, edges, d, parents) => {
 
 export const getCycles = (source, cache) => {
 
-  const [vertices, edges] = constructGraphParams(cache, Object.keys(addressSymbolMap))
+  const [vertices, edges] = constructGraphParams(cache, cache.getAddresses())
 
-  const [dists, parents] = bellmanFord(vertices, edges, Object.keys(cache).map(dex => encodeVertex(source, dex)))
+  const [dists, parents] = bellmanFord(vertices, edges, DEXES.map(dex => encodeVertex(source, dex)))
 
   return findCycles(vertices, edges, dists, parents)
 }

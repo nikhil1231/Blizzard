@@ -61,7 +61,7 @@ export const gradientDescent = (lps) => {
 export const calculateOptimumInput = (actions, cache) => {
   const lps = []
   for (const action of actions) {
-    const pair = cache[action.dex][makePairName(action.from, action.to)]
+    const pair = cache.get(action.dex, action.from, action.to)
     const reserves = pair.token0.id == action.from
       ? [pair.reserve0, pair.reserve1]
       : [pair.reserve1, pair.reserve0]
