@@ -1,34 +1,44 @@
 import assert from 'assert'
-import { Edge, constructGraphParams, bellmanFord, findCycles } from '../graph.js'
+import { Edge, constructGraphParams, bellmanFord, findCycles, subtractFee } from '../graph.js'
+import { makePairName } from '../utils.js';
 
 describe('Graph', () => {
   describe("#constructGraphParams()", () => {
     it('should work in general', () => {
       const dexes = ['JOE', 'PNG']
-      const symbols = ['a', 'b']
+      const symbols = ['a', 'b', 'c']
       const price = 5
       const pairs = {}
 
       for (const s1 of symbols) {
-        pairs[s1] = {}
         for (const s2 of symbols.filter(s => s != s1)) {
-          pairs[s1][s2] = price
+          const pairName = makePairName(s1, s2)
+          pairs[pairName] = {
+            token0: {
+              symbol: s1
+            },
+            token1: {
+              symbol: s2
+            },
+            token0Price: price,
+            token1Price: 1 / price,
+          }
         }
       }
 
-      const priceSets = dexes.map(dex => {
-        return {
-          dex,
-          pairs
-        }
-      })
+      const cache = {}
+      for (const dex of dexes) {
+        cache[dex] = pairs
+      }
 
-      const [v, e] = constructGraphParams(priceSets)
+      const [v, e] = constructGraphParams(cache, symbols)
 
       assert.deepEqual(v, ['JOE_a',
       'JOE_b',
+      'JOE_c',
       'PNG_a',
-      'PNG_b'])
+      'PNG_b',
+      'PNG_c'])
 
       // TODO: test edges
 
@@ -175,6 +185,13 @@ describe('Graph', () => {
         ]
       ])
     });
+  });
+
+  describe('#subtractFee()', () => {
+    it('should work', () => {
+      const price = 100
+      assert.equal(subtractFee(price, 'JOE'), 99.7)
+    })
   });
 });
 

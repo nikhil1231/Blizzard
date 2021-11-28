@@ -1,4 +1,4 @@
-import { DEX_INFO, encodeVertex, decodeVertex } from './utils.js';
+import { DEX_INFO, encodeVertex, decodeVertex, addressSymbolMap } from './utils.js';
 
 export class Edge {
   constructor(e, v, weight) {
@@ -8,16 +8,27 @@ export class Edge {
   }
 };
 
-export const constructGraphParams = (priceSets) => {
-  const vertices = priceSets.map(set => Object.keys(set.pairs).map(symbol => encodeVertex(symbol, set.dex))).flat()
-  const edges = [];
+export const subtractFee = (price, dex) => price * (1 - DEX_INFO[dex].fee)
 
-  for (const priceSet of priceSets) {
-    for (const [t1, t2s] of Object.entries(priceSet.pairs)) {
-      for (const [t2, price] of Object.entries(t2s)) {
-        const priceWithFee = price * (1 - DEX_INFO[priceSet.dex].fee)
-        edges.push(new Edge(encodeVertex(t1, priceSet.dex), encodeVertex(t2, priceSet.dex), -Math.log(priceWithFee)))
-      }
+const createEdge = (dex, t0, t1, price) => {
+  const p = subtractFee(price, dex)
+  return new Edge(encodeVertex(t0, dex), encodeVertex(t1, dex), -Math.log(p))
+}
+
+const createEdges = (dex, pair) => {
+  return [
+    createEdge(dex, pair.token0.id, pair.token1.id, pair.token1Price),
+    createEdge(dex, pair.token1.id, pair.token0.id, pair.token0Price),
+  ]
+}
+
+export const constructGraphParams = (cache, tokenAddresses) => {
+  const vertices = Object.keys(cache).map(dex => tokenAddresses.map(addr => encodeVertex(addr, dex))).flat()
+  const edges = []
+
+  for (const [dex, pairs] of Object.entries(cache)) {
+    for (const pair of Object.values(pairs)) {
+      edges.push(...createEdges(dex, pair))
     }
   }
 
@@ -83,10 +94,7 @@ export const findCycles = (vertices, edges, d, parents) => {
       // Slice to get the cyclic portion
       const idx = cycle.indexOf(x);
       cycle.push(x);
-      // cycle.slice(idx);
-      // cycle.shift();
       cycle = cycle.slice(idx).reverse()
-      // cycle.pop();
       allCycles.push(cycle);
     }
   }
@@ -108,11 +116,11 @@ export const findCycles = (vertices, edges, d, parents) => {
   return allCycles;
 };
 
-export const getCycles = (source, priceSets, dexes) => {
+export const getCycles = (source, cache) => {
 
-  const [vertices, edges] = constructGraphParams(priceSets)
+  const [vertices, edges] = constructGraphParams(cache, Object.keys(addressSymbolMap))
 
-  const [dists, parents] = bellmanFord(vertices, edges, dexes.map(dex => encodeVertex(source, dex)))
+  const [dists, parents] = bellmanFord(vertices, edges, Object.keys(cache).map(dex => encodeVertex(source, dex)))
 
   return findCycles(vertices, edges, dists, parents)
 }

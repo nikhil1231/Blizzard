@@ -1,4 +1,6 @@
 import fetch from 'node-fetch';
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import { DEX_INFO } from './utils.js';
 
 const getTJPairs = async () => {
   const res = await fetch("https://api.thegraph.com/subgraphs/name/traderjoe-xyz/exchange", {
@@ -46,9 +48,20 @@ const getPPairs = async () => {
   return await res.json();
 }
 
-export const getPairs = (dex) => {
+const getPairs = (dex) => {
   return {
     JOE: getTJPairs,
     PNG: getPPairs
   }[dex]
+}
+
+export const getData = async (dex, useCached=false) => {
+  var pairsData
+  if (useCached && existsSync(DEX_INFO[dex].path)) {
+    pairsData = JSON.parse(readFileSync(DEX_INFO[dex].path))
+  } else {
+    pairsData = await getPairs(dex)()
+    writeFileSync(DEX_INFO[dex].path, JSON.stringify(pairsData))
+  }
+  return pairsData.data.pairs
 }

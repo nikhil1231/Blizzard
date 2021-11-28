@@ -1,78 +1,29 @@
-import { getPairs } from './request.js';
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { getCycles } from './graph.js'
-import { DEX_INFO, decodeVertex } from './utils.js';
+import { getData } from './request.js';
+import { createCache } from './processing.js';
+import { DEXES, addressSymbolMap } from './utils.js';
+import { getArbActions } from './arb.js';
+import { calculateOptimumInput } from './MEV.js';
 
-const DEXES = Object.keys(DEX_INFO)
-const DEX_I = {}
-for (const i in DEXES) {
-  DEX_I[DEXES[i]] = i
-}
+const SOURCE = '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7'
+const MAX_PAIRS = 100
+const USE_STORED_DATA = false
 
-const getData = async (dex, useCached=false) => {
-  var pairsData
-  if (useCached && existsSync(DEX_INFO[dex].path)) {
-    pairsData = JSON.parse(readFileSync(DEX_INFO[dex].path))
-  } else {
-    pairsData = await getPairs(dex)()
-    writeFileSync(DEX_INFO[dex].path, JSON.stringify(pairsData))
-  }
-  return pairsData.data.pairs
-}
+const dataCalls = DEXES.map(dex => getData(dex, USE_STORED_DATA))
 
-const processPairs = (oldPairs, dex) => {
-  const pairs = {}
-  for (const pair of oldPairs) {
-    const t0 = pair.token0.symbol
-    const t1 = pair.token1.symbol
-    if (!(t0 in pairs)) {
-      pairs[t0] = {}
-    }
-    if (!(t1 in pairs)) {
-      pairs[t1] = {}
-    }
-    pairs[t0][t1] = pair.token0Price
-    pairs[t1][t0] = pair.token1Price
-  }
-  return { pairs, dex }
-}
-
-const cycleToActions = (cycle) => {
-  const c = cycle.map((x, i) => {
-    if (i > 0) {
-      const from = decodeVertex(cycle[i - 1])[1]
-      const [dex, to] = decodeVertex(x)
-      return { from, to, dex }
-    }
-  })
-  c.shift()
-  return c.filter(a => a.from != a.to);
-}
-
-const getProfit = (actions, priceSets) => actions.reduce((acc, action) => acc * priceSets[DEX_I[action.dex]].pairs[action.from][action.to], 1);
-
-const createGraph = async (dataSets) => {
-
-  const priceSets = dataSets.map(pairs => pairs.slice(0, 100))
-    .map((pairs, i) => processPairs(pairs, DEXES[i]))
-
-  const cycles = getCycles("WAVAX", priceSets, DEXES)
-
-  console.log(cycles)
-
-  for (const cycle of cycles) {
-    const actions = cycleToActions(cycle)
-
-    console.log(actions)
-
-    console.log(getProfit(actions, priceSets))
-  }
-
-}
-
-const dataCalls = DEXES.map(dex => getData(dex))
-
+console.log("Getting data...");
 const dataSets = await Promise.all(dataCalls)
 
-const graph = await createGraph(dataSets)
+console.log("Creating cache...");
+const cache = createCache(dataSets, DEXES, MAX_PAIRS)
 
+console.log("Finding arbs...");
+const actions = await getArbActions(cache, SOURCE)
+
+for (const action of actions) {
+  console.log(`From ${addressSymbolMap[action.from]}(${action.from}) to ${addressSymbolMap[action.to]}(${action.to}) on ${action.dex}`);
+}
+
+console.log("Calculating optimum...");
+const [inputAmount, outputAmount] = calculateOptimumInput(actions, cache)
+
+console.log(`Optimum input: ${inputAmount}, theoretical output: ${outputAmount}, profit: ${outputAmount - inputAmount} WAVAX`);
