@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import { Cache } from './cache.js';
 
 const DATA_PATH = './data/metadata.json'
 const CACHE_PATH = './data/cache.json'
@@ -16,7 +17,7 @@ export const writeMetadata = (metadata) => {
 }
 
 export const readCache = () => {
-  return JSON.parse(readFileSync(CACHE_PATH))
+  return Object.assign(new Cache, JSON.parse(readFileSync(CACHE_PATH)))
 }
 
 export const writeCache = (cache) => {

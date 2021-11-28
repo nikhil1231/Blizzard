@@ -58,7 +58,7 @@ export const gradientDescent = (lps) => {
   return [a0, out[out.length - 2]]
 }
 
-export const calculateOptimumInput = (actions, cache) => {
+export const calculateOptimumInput = (actions, cache, maxA0) => {
   const lps = []
   for (const action of actions) {
     const pair = cache.get(action.dex, action.from, action.to)
@@ -66,6 +66,10 @@ export const calculateOptimumInput = (actions, cache) => {
       ? [pair.reserve0, pair.reserve1]
       : [pair.reserve1, pair.reserve0]
     lps.push(reserves)
+  }
+  const out = getAmountsOutProfit(maxA0, lps)
+  if (getGradient(out, lps) > 0) {
+    return [maxA0, out[out.length - 2]]
   }
 
   return gradientDescent(lps)

@@ -2,6 +2,7 @@ import { makePairName } from './utils.js'
 
 export class Cache {
   constructor(metadata, maxPairs) {
+    if (!metadata) return;
     this._cache = {}
     this._addressMap = {}
     this._lps = []
