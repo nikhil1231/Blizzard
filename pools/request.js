@@ -1,8 +1,43 @@
 import fetch from 'node-fetch';
-import { existsSync, readFileSync, writeFileSync } from "fs";
 import { DEXES } from './utils.js';
+import { metadataExists, readMetadata, writeMetadata } from './persistence.js';
 
-const DATA_PATH = './data/metadata.json'
+const getPairs = (dex) => {
+  return {
+    JOE: getTJPairs,
+    PNG: getPPairs
+  }[dex]
+}
+
+export const getLPMetadata = async (useCached=false) => {
+  if (useCached && metadataExists()) {
+    return readMetadata()
+  }
+
+  const fetches = await Promise.all(DEXES.map(dex => getPairs(dex)()))
+
+  let data = {}
+  for (let i = 0; i < DEXES.length; i++) {
+    data[DEXES[i]] = []
+    for (const pair of fetches[i].data.pairs) {
+      data[DEXES[i]].push({
+        id: pair.id,
+        token0: {
+          id: pair.token0.id,
+          symbol: pair.token0.symbol
+        },
+        token1: {
+          id: pair.token1.id,
+          symbol: pair.token1.symbol
+        },
+      })
+    }
+  }
+
+  writeMetadata(data)
+
+  return data
+}
 
 const getTJPairs = async () => {
   const res = await fetch("https://api.thegraph.com/subgraphs/name/traderjoe-xyz/exchange", {
@@ -48,41 +83,4 @@ const getPPairs = async () => {
     "credentials": "omit"
   })
   return await res.json();
-}
-
-const getPairs = (dex) => {
-  return {
-    JOE: getTJPairs,
-    PNG: getPPairs
-  }[dex]
-}
-
-export const getLPMetadata = async (useCached=false) => {
-  if (useCached && existsSync(DATA_PATH)) {
-    return JSON.parse(readFileSync(DATA_PATH))
-  }
-
-  const fetches = await Promise.all(DEXES.map(dex => getPairs(dex)()))
-
-  let data = {}
-  for (let i = 0; i < DEXES.length; i++) {
-    data[DEXES[i]] = []
-    for (const pair of fetches[i].data.pairs) {
-      data[DEXES[i]].push({
-        id: pair.id,
-        token0: {
-          id: pair.token0.id,
-          symbol: pair.token0.symbol
-        },
-        token1: {
-          id: pair.token1.id,
-          symbol: pair.token1.symbol
-        },
-      })
-    }
-  }
-
-  writeFileSync(DATA_PATH, JSON.stringify(data))
-
-  return data
 }
