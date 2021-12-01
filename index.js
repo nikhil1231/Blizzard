@@ -2,10 +2,11 @@ import { getLPMetadata } from './request.js';
 import { Cache } from './cache.js';
 import { getArbActions } from './arb.js';
 import { calculateOptimumInput } from './MEV.js';
-import { DataProvider, getAvaxPrice, getGasPrice } from './data.js';
+import { DataProvider, getAvaxPrice, getGasPrice } from './ether.js';
 import { readCache, writeCache } from './persistence.js';
 import { estimateGas } from './utils.js';
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler';
+
 
 const MIN_PROFIT = 0.05 // AVAX
 const MAX_A0 = 10
@@ -46,6 +47,8 @@ const doTheMonsterMath = async (actions, cache, gasPriceCall) => {
 
   const netProfit = outputAmount - inputAmount - estimatedGas
   console.log(`Net profit: ${netProfit} AVAX`);
+
+  return inputAmount
 }
 
 const execute = async (netProfit) => {
@@ -72,9 +75,9 @@ const main = async () => {
     return
   }
 
-  const netProfit = await doTheMonsterMath(actions, cache, gasPriceCall)
+  const inputAmount = await doTheMonsterMath(actions, cache, gasPriceCall)
 
-  await execute(netProfit)
+  await execute(inputAmount)
 
 }
 

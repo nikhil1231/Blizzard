@@ -1,8 +1,19 @@
 import { ethers } from "ethers";
-import { LP_ABI } from './utils.js';
+import { LP_ABI, ICE_ABI } from './utils.js';
+import * as dotenv from "dotenv";
 
-const provider = new ethers.providers.JsonRpcProvider('https://api.avax.network/ext/bc/C/rpc')
+dotenv.config();
+
+const rpc = parseInt(process.env.TEST)
+  ? 'https://api.avax-test.network/ext/bc/C/rpc'
+  : 'https://api.avax.network/ext/bc/C/rpc';
+
+const provider = new ethers.providers.JsonRpcProvider(rpc)
+const wallet = new ethers.Wallet(process.env.PK, provider);
+
+const ice = new ethers.Contract(process.env.ICE, ICE_ABI, provider)
 const AVAX_USD = new ethers.Contract('0xA389f9430876455C36478DeEa9769B7Ca4E3DDB1', LP_ABI, provider)
+
 
 export class DataProvider {
   constructor(lps) {
@@ -27,4 +38,18 @@ export const getGasPrice = async () => {
   const gas = await provider.getGasPrice()
   const gasGwei = ethers.utils.formatEther(gas)
   return gasGwei
+}
+
+export const sendArb = async (amountIn, amountOutMin, tokens, lps) => {
+  await ice.connect(wallet).arb(amountIn, amountOutMin, tokens, lps)
+}
+
+export const withdraw = async (amount) => {
+  return await ice.connect(wallet).withdraw(amount)
+}
+
+export const deposit = async (amount) => {
+  return await ice.connect(wallet).deposit({
+    value: amount
+  })
 }
