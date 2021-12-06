@@ -1,13 +1,17 @@
 import assert from 'assert'
-import { Edge, constructGraphParams, bellmanFord, findCycles, subtractFee } from '../graph.js'
+import { constructGraph, findCycles, filterCycles } from '../graph.js'
 import { makePairName } from '../utils.js';
+import { Cache } from '../cache.js';
+import { ethers } from 'ethers';
+import { MIN_A0 } from '../config.js'
 
 describe('Graph', () => {
-  describe("#constructGraphParams()", () => {
+  describe("#constructGraph()", () => {
     it('should work in general', () => {
-      const dexes = ['JOE', 'PNG']
+      return
+      const dexes = ['PNG', 'PNG']
       const symbols = ['a', 'b', 'c']
-      const price = 5
+      const reserve = 1e7
       const pairs = {}
 
       for (const s1 of symbols) {
@@ -20,18 +24,23 @@ describe('Graph', () => {
             token1: {
               symbol: s2
             },
-            token0Price: price,
-            token1Price: 1 / price,
+            reserve0: reserve,
+            reserve1: reserve * 2,
           }
         }
       }
 
-      const cache = {}
+      const _cache = {}
       for (const dex of dexes) {
-        cache[dex] = pairs
+        _cache[dex] = pairs
       }
 
-      const [v, e] = constructGraphParams(cache, symbols)
+      const cache = new Cache()
+      cache._cache = _cache
+
+      console.log(cache);
+
+      const [v, e] = constructGraph(cache, symbols)
 
       assert.deepEqual(v, ['JOE_a',
       'JOE_b',
@@ -40,161 +49,357 @@ describe('Graph', () => {
       'PNG_b',
       'PNG_c'])
 
+      console.log(e);
+
       // TODO: test edges
 
     })
   })
 
-  describe('#bellmanFord()', () => {
-    it('should work for standard input', () => {
-      const v = ['s', 'a', 'b', 'c', 'd', 'e']
-      const edges = [
-        new Edge('s', 'a', 10),
-        new Edge('s', 'e', 8),
-        new Edge('a', 'c', 2),
-        new Edge('b', 'a', 1),
-        new Edge('c', 'b', -2),
-        new Edge('d', 'a', -4),
-        new Edge('d', 'c', -1),
-        new Edge('e', 'd', 1),
-      ]
-      const [dists, parents] = bellmanFord(v, edges, ['s'])
-      assert.deepEqual(dists, {
-        's': 0,
-        'a': 5,
-        'b': 5,
-        'c': 7,
-        'd': 9,
-        'e': 8,
-      });
-
-      assert.deepEqual(parents, {
-        's': null,
-        'a': 'd',
-        'b': 'c',
-        'c': 'a',
-        'd': 'e',
-        'e': 's',
-      })
-    });
-
-    it('should work with cycles', () => {
-      const v = ['s', 'a', 'b']
-      const edges = [
-        new Edge('s', 'a', 1),
-        new Edge('a', 'b', 1),
-        new Edge('b', 's', -3),
-      ]
-      const [dists, parents] = bellmanFord(v, edges, ['s'])
-      assert.deepEqual(dists, {
-        's': -2,
-        'a': 0,
-        'b': 1,
-      });
-
-      assert.deepEqual(parents, {
-        's': 'b',
-        'a': 's',
-        'b': 'a',
-      })
-    });
-
-    it('should work for negative log values', () => {
-      const v = ['s', 'a', 'b']
-      const edges = [
-        newEdge('s', 'a', 1),
-        newEdge('a', 'b', 4),
-        newEdge('b', 's', 0.5),
-      ]
-      const [dists, parents] = bellmanFord(v, edges, ['s'])
-      assert.deepEqual(dists, {
-        's': nlPathCost(1, 4, 0.5, 1, 4, 0.5),
-        'a': nlPathCost(1, 4, 0.5, 1),
-        'b': nlPathCost(1, 4, 0.5, 1, 4),
-      });
-
-      assert.deepEqual(parents, {
-        's': 'b',
-        'a': 's',
-        'b': 'a',
-      })
-    });
-
-    it('should work for multiple exchanges', () => {
-      const v = ['1s', '1a', '1b', '2s', '2a', '2b']
-      const edges = [
-        newEdge('1s', '1a', 1),
-        newEdge('1a', '1b', 2),
-        newEdge('1b', '1s', 0.6),
-
-        newEdge('2s', '2a', 1.1),
-        newEdge('2a', '2b', 2.1),
-        newEdge('2b', '2s', 0.5),
-
-        newEdge('1s', '2s', 1),
-        newEdge('2s', '1s', 1),
-        newEdge('1a', '2a', 1),
-        newEdge('2a', '1a', 1),
-        newEdge('1b', '2b', 1),
-        newEdge('2b', '1b', 1),
-      ]
-      const [dists, parents] = bellmanFord(v, edges, ['1s', '2s'])
-
-      assert.deepEqual(parents, {
-        '1s': '1b',
-        '1a': '2a',
-        '1b': '2b',
-        '2s': '1s',
-        '2a': '2s',
-        '2b': '2a',
-      })
-    });
-  });
-
   describe('#findCycles()', () => {
-    it('should work for standard input', () => {
-      const v = ['s', 'a', 'b', 'c']
-      const edges = [
-        new Edge('s', 'a', 1),
-        new Edge('a', 'b', 1),
-        new Edge('b', 's', -3),
-        new Edge('s', 'c', 0),
-        new Edge('c', 'b', 1),
-      ]
-      const dists = {
-        's': -5,
-        'a': -2,
-        'b': -4,
-        'c': -5,
-      }
-      const parents = {
-        's': 'b',
-        'a': 's',
-        'b': 'c',
-        'c': 's',
-      }
+    it('should find no cycles in efficient market', () => {
+      const g = newGraph()
 
-      const cycles = findCycles(v, edges, dists, parents)
+      const cycles = findCycles(g, 'w')
 
-      assert.deepEqual(cycles, [
-        [
-          's',
-          'c',
-          'b',
-          's'
-        ]
-      ])
+      const filteredCycles = filterCycles(cycles)
+
+      assert.deepEqual(filteredCycles, [])
     });
-  });
 
-  describe('#subtractFee()', () => {
-    it('should work', () => {
-      const price = 100
-      assert.equal(subtractFee(price, 'JOE'), 99.7)
-    })
+    it('should find a cycle in the same dex', () => {
+      const g = newSmallGraph()
+
+      g['JOE_w']['JOE_a'].r1 = ethers.utils.parseEther('2100')
+
+      const cycles = findCycles(g, 'w')
+
+      const filteredCycles = filterCycles(cycles)
+
+      assert.equal(filteredCycles.length, 1)
+
+      assert.deepEqual(filteredCycles[0].cycle, ['JOE_w', 'JOE_a', 'JOE_b', 'JOE_w'])
+    });
+
+    it('should ignore cycles with too low liquidity', () => {
+      const g = newSmallGraph()
+
+      g['JOE_w']['JOE_a'].r1 = ethers.utils.parseEther('2100') // Would normally cause arb
+
+      g['JOE_a']['JOE_b'].r0 = ethers.utils.parseEther('40')
+      g['JOE_a']['JOE_b'].r1 = ethers.utils.parseEther('80')
+
+      const cycles = findCycles(g, 'w')
+
+      const filteredCycles = filterCycles(cycles)
+
+      assert.deepEqual(filteredCycles, [])
+    });
+
+    it('should find a cycle across dexes', () => {
+      const g = newGraph()
+
+      g['JOE_w']['JOE_a'].r1 = ethers.utils.parseEther('2010')
+
+      g['PNG_a']['PNG_b'].r1 = ethers.utils.parseEther('2020')
+
+      g['JOE_b']['JOE_w'].r1 = ethers.utils.parseEther('500')
+
+      const cycles = findCycles(g, 'w')
+
+      const filteredCycles = filterCycles(cycles)
+
+      assert.equal(filteredCycles.length, 1)
+
+      assert.deepEqual(filteredCycles[0].cycle, ['JOE_w', 'JOE_a', 'PNG_a', 'PNG_b', 'PNG_w'])
+
+    });
   });
 });
 
-const newEdge = (from, to, w) => new Edge(from, to, nl(w))
-const nl = (x) => -Math.log(x)
-const nlPathCost = (...xs) => xs.map(x => nl(x)).reduce((acc, cur) => acc + cur, 0)
+const newSmallGraph = () => ({
+  'JOE_w': {
+    'JOE_a': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'JOE_b': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('4000'),
+      sameCoin: false
+    },
+  },
+  'JOE_a': {
+    'JOE_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_b': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+  },
+  'JOE_b': {
+    'JOE_w': {
+      r0: ethers.utils.parseEther('4000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_a': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+  },
+})
+
+const newGraph = () => ({
+  'JOE_w': {
+    'JOE_a': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'JOE_b': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('4000'),
+      sameCoin: false
+    },
+    'JOE_c': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'JOE_d': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'JOE_e': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'PNG_w': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'JOE_a': {
+    'JOE_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_b': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'PNG_a': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'JOE_b': {
+    'JOE_w': {
+      r0: ethers.utils.parseEther('4000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_a': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_b': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'JOE_c': {
+    'JOE_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_d': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_c': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'JOE_d': {
+    'JOE_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_c': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_e': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_d': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'JOE_e': {
+    'JOE_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_d': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_e': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+
+  'PNG_w': {
+    'PNG_a': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'PNG_b': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('4000'),
+      sameCoin: false
+    },
+    'PNG_c': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'PNG_d': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'PNG_e': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'JOE_w': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'PNG_a': {
+    'PNG_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_b': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('2000'),
+      sameCoin: false
+    },
+    'JOE_a': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'PNG_b': {
+    'PNG_w': {
+      r0: ethers.utils.parseEther('4000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_a': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_b': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'PNG_c': {
+    'PNG_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_d': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_c': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'PNG_d': {
+    'PNG_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_c': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_e': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_d': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+  'PNG_e': {
+    'PNG_w': {
+      r0: ethers.utils.parseEther('2000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'PNG_d': {
+      r0: ethers.utils.parseEther('1000'),
+      r1: ethers.utils.parseEther('1000'),
+      sameCoin: false
+    },
+    'JOE_e': {
+      r0: ethers.BigNumber.from('0'),
+      r1: ethers.BigNumber.from('0'),
+      sameCoin: true
+    },
+  },
+})

@@ -1,5 +1,6 @@
-import { DEXES, encodeVertex, decodeVertex, getAmountOut } from './utils.js';
-import { MIN_PROFIT } from './config.js';
+import { DEXES, MAX_BN, encodeVertex, decodeVertex, getAmountOut, makePairName, getAmountsOut } from './utils.js';
+import { MIN_A0, MIN_LIQUIDITY, MAX_CYCLE_LENGTH } from './config.js';
+import { ethers } from 'ethers';
 
 export class Edge {
   constructor(e, v, weight) {
@@ -9,117 +10,105 @@ export class Edge {
   }
 };
 
-const createEdge = (dex, t0, t1, p) => {
-  return new Edge(encodeVertex(t0, dex), encodeVertex(t1, dex), -Math.log(p))
-}
+export const constructGraph = (cache) => {
 
-const createEdges = (dex, pair) => {
-  const priceWithfee0 = getAmountOut(MIN_PROFIT, pair.reserve1, pair.reserve0)
-  const priceWithfee1 = getAmountOut(MIN_PROFIT, pair.reserve0, pair.reserve1)
+  const graph = {}
 
-  return [
-    createEdge(dex, pair.token0.id, pair.token1.id, priceWithfee1),
-    createEdge(dex, pair.token1.id, pair.token0.id, priceWithfee0),
-  ]
-}
+  const addEdge = (v0, v1, r0, r1, sameCoin = false) => {
+    if (!(v0 in graph)) {
+      graph[v0] = {}
+    }
+    if (!(v1 in graph)) {
+      graph[v1] = {}
+    }
 
-export const constructGraphParams = (cache, tokenAddresses) => {
-  const vertices = DEXES.map(dex => tokenAddresses.map(addr => encodeVertex(addr, dex))).flat()
-  const edges = []
+    graph[v0][v1] = {
+      r0,
+      r1,
+      sameCoin
+    }
+
+    graph[v1][v0] = {
+      r1: r0,
+      r0: r1,
+      sameCoin
+    }
+  }
 
   for (const [dex, pair] of cache.enumerate()) {
-    edges.push(...createEdges(dex, pair))
+    const v0 = encodeVertex(pair.token0.id, dex)
+    const v1 = encodeVertex(pair.token1.id, dex)
+
+    addEdge(v0, v1, pair.reserve0, pair.reserve1)
   }
+
+  const vertices = DEXES.map(dex => cache.getAddresses().map(addr => encodeVertex(addr, dex))).flat()
 
   // Unit edge between same coin, different exchanges
-  for (const v1 of vertices) {
-    const [d1, s1] = decodeVertex(v1)
-    for (const v2 of vertices) {
-      const [d2, s2] = decodeVertex(v2)
-      if (s1 == s2 && d1 != d2) {
-        edges.push(new Edge(v1, v2, 0))
+  for (const v0 of vertices) {
+    const [d1, a1] = decodeVertex(v0)
+    for (const v1 of vertices) {
+      const [d2, a2] = decodeVertex(v1)
+      if (a1 == a2 && d1 != d2) {
+        addEdge(v0, v1, MAX_BN, MAX_BN, true)
       }
     }
   }
 
-  return [vertices, edges]
+  return graph
 }
 
-export const bellmanFord = (vertices, edges, sources) => {
-  const d = {};
-  const parents = {};
-  for (const v of vertices) {
-    d[v] = Infinity;
-    parents[v] = null;
+const dfs = (graph, v, cycle, cycles, visited, source, i, lastReturn, lastLiq, lastPrice, lowestLiq) => {
+  if (i == 0) return
+
+  const newCycle = [...cycle, v]
+
+  const addr = decodeVertex(v)[1]
+  if (newCycle.length > 2 && addr == source) {
+    cycles.push({
+      cycle: newCycle,
+      lastReturn,
+      lowestLiq
+    })
+    return
   }
 
-  for (const source of sources) {
-    d[source] = 0;
-  }
-
-  for (let i = 0; i < vertices.length - 1; i++) {
-    for (const e of edges) {
-      // Bellman-Ford relaxation
-      if (d[e.from] + e.weight < d[e.to]) {
-        d[e.to] = d[e.from] + e.weight;
-        parents[e.to] = e.from;
-      }
+  const edges = graph[v]
+  for (const [newV, info] of Object.entries(edges)) {
+    const newAddr = decodeVertex(newV)[1]
+    if (visited.includes(makePairName(addr, newAddr))) {
+      continue
     }
+
+    const currentPrice = info.r1 / info.r0
+    const currentLiq = info.sameCoin ? lastLiq : lastPrice * info.r0
+
+    const newVisited = [...visited, makePairName(addr, newAddr)]
+    const nextReturn = info.sameCoin ? lastReturn : getAmountOut(lastReturn, info.r0, info.r1)
+    const nextPrice = info.sameCoin ? lastPrice : lastPrice * currentPrice
+    dfs(graph, newV, newCycle, cycles, newVisited, source, info.sameCoin ? i : i - 1,
+      nextReturn, info.r1, nextPrice, currentLiq < lowestLiq ? currentLiq : lowestLiq)
   }
-  return [d, parents]
 }
 
-export const findCycles = (vertices, edges, d, parents) => {
-
-  // Find cycles if they exist
-  let allCycles = [];
-  const seen = {};
-
-  for (const e of edges) {
-    if (seen[e.to])
-      continue;
-    // If we can relax further there must be a neg-weight cycle
-    if (d[e.from] + e.weight < d[e.to]) {
-      let cycle = [];
-      let x = e.to;
-      while (1) {
-        // Walk back along parents until a cycle is found
-        seen[e.to] = true;
-        cycle.push(x);
-        x = parents[x];
-        if (x == e.to || cycle.includes(x))
-          break;
-      }
-      // Slice to get the cyclic portion
-      const idx = cycle.indexOf(x);
-      cycle.push(x);
-      cycle = cycle.slice(idx).reverse()
-      allCycles.push(cycle);
-    }
-  }
-
-  // Remove duplicate cycles
-  allCycles = allCycles.filter((a, i) => {
-    let res = true;
-    for (var j = i, l = allCycles.length; j < l; j++) {
-      const b = allCycles[j]
-      if (a != b && a.every(x => b.includes(x)))
-        res = false;
-    }
-    return res;
-  }).map((cycle) => cycle.filter((x, i) => {
-    // Remove same-coin switches
-    return !i || Math.abs(x - cycle[i - 1]) != vertices.length
-  }))
-
-  return allCycles;
+export const findCycles = (graph, source) => {
+  const cycles = []
+  dfs(graph, encodeVertex(source, DEXES[0]), [], cycles, [], source, MAX_CYCLE_LENGTH, MIN_A0, 1, 1, MAX_BN)
+  return cycles
 };
+
+export const filterCycles = (cycles) => {
+  return cycles.filter(c => c.lastReturn.gte(MIN_A0))
+    .filter(c => c.lowestLiq > MIN_LIQUIDITY)
+}
 
 export const getCycles = (source, cache) => {
 
-  const [vertices, edges] = constructGraphParams(cache, cache.getAddresses())
+  const graph = constructGraph(cache, cache.getAddresses())
 
-  const [dists, parents] = bellmanFord(vertices, edges, DEXES.map(dex => encodeVertex(source, dex)))
+  const cycles = findCycles(graph, source)
 
-  return findCycles(vertices, edges, dists, parents)
+  const filteredCycles = filterCycles(cycles)
+
+  return filteredCycles
 }

@@ -1,3 +1,4 @@
+import { ethers } from "ethers"
 
 export const DEX_INFO = {
   JOE: {
@@ -11,6 +12,8 @@ export const DEX_INFO = {
 }
 
 export const DEXES = Object.keys(DEX_INFO)
+
+export const MAX_BN = ethers.BigNumber.from('0xffffffffffffffffffffffffffffffff')
 
 export const encodeVertex = (symbol, dex) => dex + "_" + symbol
 

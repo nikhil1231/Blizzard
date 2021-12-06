@@ -27,7 +27,7 @@ const findArbs = async (cache) => {
   const actions = await getArbActions(cache, SOURCE)
 
   for (const action of actions) {
-    console.log(`${action.dex}: From ${cache.getSymbol([action.from])}(${action.from}) to ${cache.getSymbol([action.to])}(${action.to})`);
+    console.log(`${action.dex}: From ${cache.getSymbol([action.from])} (${action.from}) to ${cache.getSymbol([action.to])} (${action.to}), LP(${action.lp})`);
   }
   return actions
 }
@@ -94,3 +94,5 @@ const main = async () => {
 const mainTask = new AsyncTask('Main looper', () => main())
 const mainJob = new SimpleIntervalJob(MAIN_LOOP_INTERVAL, mainTask)
 scheduler.addSimpleIntervalJob(mainJob)
+
+main()
