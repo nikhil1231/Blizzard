@@ -7,6 +7,7 @@ import { readCache, writeCache, readBlacklist } from './persistence.js';
 import { estimateGas } from './utils.js';
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler';
 import { MIN_PROFIT, GAS_MULTIPLIER, MAX_PAIRS, MAIN_LOOP_INTERVAL } from "./config.js"
+import { ethers } from 'ethers'
 
 
 const SOURCE = '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7'
@@ -36,14 +37,14 @@ const doTheMonsterMath = async (actions, cache, gasPriceCall) => {
   console.log("Calculating optimum...");
   let [inputAmount, outputAmount, grossProfit] = calculateOptimumInput(actions, cache)
 
-  console.log(`Optimum input: ${inputAmount}, gross output: ${outputAmount}, gross profit: ${grossProfit} WAVAX`);
+  console.log(`Optimum input: ${ethers.utils.formatEther(inputAmount)}, gross output: ${ethers.utils.formatEther(outputAmount)}, gross profit: ${ethers.utils.formatEther(grossProfit)} WAVAX`);
 
   const gasPrice = await gasPriceCall
   const estimatedGas = estimateGas(actions.length - 1, gasPrice) * GAS_MULTIPLIER
-  console.log(`Gas price: ${gasPrice}, Estimated gas ${estimatedGas}`);
+  console.log(`Gas price: ${ethers.utils.formatUnits(gasPrice, "gwei")}, Estimated gas ${ethers.utils.formatUnits(estimatedGas, "gwei")}`);
 
   const netProfit = grossProfit - estimatedGas
-  console.log(`Net profit: ${netProfit} AVAX`);
+  console.log(`Net profit: ${ethers.utils.formatEther(netProfit)} AVAX`);
 
   return [inputAmount, netProfit]
 }
@@ -51,7 +52,7 @@ const doTheMonsterMath = async (actions, cache, gasPriceCall) => {
 const formatActions = (actions) => {
   const tokens = actions.map(action => action.from)
   tokens.push(actions[actions.length - 1].to)
-  const lps = actions.map(action => cache.get(action.dex, action.from, action.to).id)
+  const lps = actions.map(action => action.lp)
   return [tokens, lps]
 }
 

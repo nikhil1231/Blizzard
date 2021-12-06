@@ -35,9 +35,7 @@ export const getAvaxPrice = async () => {
 }
 
 export const getGasPrice = async () => {
-  const gas = await provider.getGasPrice()
-  const gasGwei = ethers.utils.formatEther(gas)
-  return gasGwei
+  return await provider.getGasPrice()
 }
 
 export const sendArb = async (amountIn, amountOutMin, tokens, lps) => {

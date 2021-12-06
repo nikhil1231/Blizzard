@@ -7,4 +7,4 @@ export const MIN_LIQUIDITY = ethers.utils.parseEther("100")
 export const GAS_MULTIPLIER = 1.2
 export const MAX_PAIRS = 200
 export const MAIN_LOOP_INTERVAL = { seconds: 3 }
-export const MAX_CYCLE_LENGTH = 4
+export const MAX_CYCLE_LENGTH = 6

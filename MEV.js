@@ -3,8 +3,8 @@ import { getAmountsOut } from "./utils.js"
 import { MAX_A0 } from "./config.js"
 
 const INITIAL_A0 = ethers.utils.parseEther("10")
-const LR = 10
-const MIN_DIFF = 0.001
+const LR = 1e9
+const MIN_DIFF = 1e5
 
 export const getAmountsOutProfit = (a0, lps) => {
   const amounts = getAmountsOut(a0, lps)
@@ -17,7 +17,7 @@ const dait_dai = (ai, r1, r2) => {
   const d = r1.mul(1000).add(x)
   const numerator = r1.mul(r2).mul(997 * 1e3)
   const denominator = d.mul(d)
-  return numerator.div(denominator)
+  return numerator / denominator
 }
 
 const getGradient = (out, lps) => {
@@ -41,8 +41,9 @@ export const gradientDescent = (lps) => {
     out = getAmountsOutProfit(a0, lps)
     const grad = getGradient(out, lps)
 
-    diff = grad * LR
-    a0.add(diff)
+    diff = Math.round(grad * LR)
+    diff = ethers.BigNumber.from(diff).mul(LR)
+    a0 = a0.add(diff)
 
     maxIters--
   }
@@ -61,6 +62,7 @@ export const calculateOptimumInput = (actions, cache) => {
   }
 
   const out = getAmountsOutProfit(MAX_A0, lps)
+
   if (getGradient(out, lps) > 0) {
     return [MAX_A0, out[out.length - 2], out[out.length - 1]]
   }

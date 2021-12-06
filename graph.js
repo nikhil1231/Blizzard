@@ -1,6 +1,5 @@
 import { DEXES, MAX_BN, encodeVertex, decodeVertex, getAmountOut, makePairName, getAmountsOut } from './utils.js';
 import { MIN_A0, MIN_LIQUIDITY, MAX_CYCLE_LENGTH } from './config.js';
-import { ethers } from 'ethers';
 
 export class Edge {
   constructor(e, v, weight) {
