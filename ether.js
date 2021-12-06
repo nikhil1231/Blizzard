@@ -41,7 +41,15 @@ export const getGasPrice = async () => {
 }
 
 export const sendArb = async (amountIn, amountOutMin, tokens, lps) => {
-  await ice.connect(wallet).arb(amountIn, amountOutMin, tokens, lps)
+  await ice.connect(wallet).arb(
+    ethers.utils.parseEther(amountIn.toString()),
+    ethers.utils.parseEther(amountOutMin.toString()),
+    tokens,
+    lps,
+    // {
+    //   gasLimit: 1e6
+    // }
+  )
 }
 
 export const withdraw = async (amount) => {

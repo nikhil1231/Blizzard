@@ -16,11 +16,13 @@ export const encodeVertex = (symbol, dex) => dex + "_" + symbol
 
 export const decodeVertex = (str) => [str.slice(0,3), str.slice(4, str.length)]
 
-export const makePairName = (p1, p2) => p1 > p2 ? `${p1}-${p2}` : `${p2}-${p1}`
+export const makePairName = (p1, p2) => p1 < p2 ? `${p1}-${p2}` : `${p2}-${p1}`
 
 export const getAmountOut = (a, r1, r2) => {
-  const af = 997 * a
-  return (af * r2) / (1000 * r1 + af)
+  const af = a.mul(997)
+  const numerator = af.mul(r2)
+  const denominator = r1.mul(1000).add(af)
+  return numerator.div(denominator)
 }
 
 export const getAmountsOut = (a0, lps) => {

@@ -1,7 +1,7 @@
 import { makePairName } from './utils.js'
 
 export class Cache {
-  constructor(metadata, maxPairs) {
+  constructor(metadata, maxPairs, blacklist) {
     if (!metadata) return;
     this._cache = {}
     this._addressMap = {}
@@ -16,6 +16,10 @@ export class Cache {
         const p2 = pair.token1.symbol
         const a1 = pair.token0.id
         const a2 = pair.token1.id
+
+        if (blacklist.includes(a1) || blacklist.includes(a2)) {
+          continue
+        }
 
         this.addAddressSymbolMap(pair.token0.id, p1)
         this.addAddressSymbolMap(pair.token1.id, p2)

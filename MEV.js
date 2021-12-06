@@ -1,31 +1,23 @@
-import { makePairName } from './utils.js'
+import { ethers } from "ethers"
+import { getAmountsOut } from "./utils.js"
+import { MAX_A0 } from "./config.js"
 
-const INITIAL_A0 = 10
+const INITIAL_A0 = ethers.utils.parseEther("10")
 const LR = 10
 const MIN_DIFF = 0.001
 
-const getAmountOut = (a, r1, r2) => {
-  const af = 997 * a
-  return (af * r2) / (1000 * r1 + af)
-}
-
-const getAmountsOut = (a0, lps) => {
-  const amounts = [a0]
-  for (const lp of lps) {
-    amounts.push(getAmountOut(amounts[amounts.length - 1], lp[0], lp[1]))
-  }
-  return amounts
-}
-
 export const getAmountsOutProfit = (a0, lps) => {
   const amounts = getAmountsOut(a0, lps)
-  amounts.push(amounts[amounts.length - 1] - a0)
+  amounts.push(amounts[amounts.length - 1].sub(a0))
   return amounts
 }
 
 const dait_dai = (ai, r1, r2) => {
-  const d = (1e3 * r1 + 997 * ai)
-  return (997 * 1e3 * r1 * r2) / (d * d)
+  const x = ai.mul(997)
+  const d = r1.mul(1000).add(x)
+  const numerator = r1.mul(r2).mul(997 * 1e3)
+  const denominator = d.mul(d)
+  return numerator.div(denominator)
 }
 
 const getGradient = (out, lps) => {
@@ -50,15 +42,15 @@ export const gradientDescent = (lps) => {
     const grad = getGradient(out, lps)
 
     diff = grad * LR
-    a0 += diff
+    a0.add(diff)
 
     maxIters--
   }
 
-  return [a0, out[out.length - 2]]
+  return [a0, out[out.length - 2], out[out.length - 1]]
 }
 
-export const calculateOptimumInput = (actions, cache, maxA0) => {
+export const calculateOptimumInput = (actions, cache) => {
   const lps = []
   for (const action of actions) {
     const pair = cache.get(action.dex, action.from, action.to)
@@ -67,9 +59,10 @@ export const calculateOptimumInput = (actions, cache, maxA0) => {
       : [pair.reserve1, pair.reserve0]
     lps.push(reserves)
   }
-  const out = getAmountsOutProfit(maxA0, lps)
+
+  const out = getAmountsOutProfit(MAX_A0, lps)
   if (getGradient(out, lps) > 0) {
-    return [maxA0, out[out.length - 2]]
+    return [MAX_A0, out[out.length - 2], out[out.length - 1]]
   }
 
   return gradientDescent(lps)

@@ -2,17 +2,12 @@ import { getLPMetadata } from './request.js';
 import { Cache } from './cache.js';
 import { getArbActions } from './arb.js';
 import { calculateOptimumInput } from './MEV.js';
-import { DataProvider, getAvaxPrice, getGasPrice } from './ether.js';
+import { DataProvider, getAvaxPrice, getGasPrice, sendArb } from './ether.js';
 import { readCache, writeCache, readBlacklist } from './persistence.js';
 import { estimateGas } from './utils.js';
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler';
+import { MIN_PROFIT, GAS_MULTIPLIER, MAX_PAIRS, MAIN_LOOP_INTERVAL } from "./config.js"
 
-
-const MIN_PROFIT = 0.05 // AVAX
-const MAX_A0 = 10
-const GAS_MULTIPLIER = 1.2
-const MAX_PAIRS = 100
-const MAIN_LOOP_INTERVAL = { seconds: 3 }
 
 const SOURCE = '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7'
 const USE_STORED_DATA = true
@@ -39,24 +34,36 @@ const findArbs = async (cache) => {
 
 const doTheMonsterMath = async (actions, cache, gasPriceCall) => {
   console.log("Calculating optimum...");
-  let [inputAmount, outputAmount] = calculateOptimumInput(actions, cache, MAX_A0)
+  let [inputAmount, outputAmount, grossProfit] = calculateOptimumInput(actions, cache)
 
-  console.log(`Optimum input: ${inputAmount}, gross output: ${outputAmount}, gross profit: ${outputAmount - inputAmount} WAVAX`);
+  console.log(`Optimum input: ${inputAmount}, gross output: ${outputAmount}, gross profit: ${grossProfit} WAVAX`);
 
   const gasPrice = await gasPriceCall
   const estimatedGas = estimateGas(actions.length - 1, gasPrice) * GAS_MULTIPLIER
   console.log(`Gas price: ${gasPrice}, Estimated gas ${estimatedGas}`);
 
-  const netProfit = outputAmount - inputAmount - estimatedGas
+  const netProfit = grossProfit - estimatedGas
   console.log(`Net profit: ${netProfit} AVAX`);
 
-  return inputAmount
+  return [inputAmount, netProfit]
 }
 
-const execute = async (netProfit) => {
-  if (netProfit > MIN_PROFIT) {
-    // Execute arb
-  }
+const formatActions = (actions) => {
+  const tokens = actions.map(action => action.from)
+  tokens.push(actions[actions.length - 1].to)
+  const lps = actions.map(action => cache.get(action.dex, action.from, action.to).id)
+  return [tokens, lps]
+}
+
+const execute = async (inputAmount, actions) => {
+    console.log("Executing arb...");
+    const [tokens, lps] = formatActions(actions)
+
+    console.log(lps);
+
+    return
+
+    await sendArb(inputAmount, inputAmount, tokens, lps)
 }
 
 const main = async () => {
@@ -77,10 +84,11 @@ const main = async () => {
     return
   }
 
-  const inputAmount = await doTheMonsterMath(actions, cache, gasPriceCall)
+  const [inputAmount, netProfit] = await doTheMonsterMath(actions, cache, gasPriceCall)
 
-  await execute(inputAmount)
-
+  if (netProfit > MIN_PROFIT) {
+    await execute(inputAmount, actions)
+  }
 }
 
 const mainTask = new AsyncTask('Main looper', () => main())

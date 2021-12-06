@@ -1,4 +1,5 @@
 import { DEXES, encodeVertex, decodeVertex, getAmountOut } from './utils.js';
+import { MIN_PROFIT } from './config.js';
 
 export class Edge {
   constructor(e, v, weight) {
@@ -13,8 +14,9 @@ const createEdge = (dex, t0, t1, p) => {
 }
 
 const createEdges = (dex, pair) => {
-  const priceWithfee0 = getAmountOut(1, pair.reserve1, pair.reserve0)
-  const priceWithfee1 = getAmountOut(1, pair.reserve0, pair.reserve1)
+  const priceWithfee0 = getAmountOut(MIN_PROFIT, pair.reserve1, pair.reserve0)
+  const priceWithfee1 = getAmountOut(MIN_PROFIT, pair.reserve0, pair.reserve1)
+
   return [
     createEdge(dex, pair.token0.id, pair.token1.id, priceWithfee1),
     createEdge(dex, pair.token1.id, pair.token0.id, priceWithfee0),
