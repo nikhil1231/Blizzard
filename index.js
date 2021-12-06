@@ -3,7 +3,7 @@ import { Cache } from './cache.js';
 import { getArbActions } from './arb.js';
 import { calculateOptimumInput } from './MEV.js';
 import { DataProvider, getAvaxPrice, getGasPrice } from './ether.js';
-import { readCache, writeCache } from './persistence.js';
+import { readCache, writeCache, readBlacklist } from './persistence.js';
 import { estimateGas } from './utils.js';
 import { ToadScheduler, SimpleIntervalJob, AsyncTask } from 'toad-scheduler';
 
@@ -20,8 +20,10 @@ const USE_STORED_CACHE = false
 
 const scheduler = new ToadScheduler()
 
+const blacklist = readBlacklist()
+
 const metadata = await getLPMetadata(USE_STORED_DATA)
-const cache =  USE_STORED_CACHE ? readCache() : new Cache(metadata, MAX_PAIRS)
+const cache =  USE_STORED_CACHE ? readCache() : new Cache(metadata, MAX_PAIRS, blacklist)
 const dataProvider = new DataProvider(cache.getLPs())
 
 

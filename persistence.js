@@ -3,6 +3,7 @@ import { Cache } from './cache.js';
 
 const DATA_PATH = './data/metadata.json'
 const CACHE_PATH = './data/cache.json'
+const BLACKLIST_PATH = './blacklist.txt'
 
 export const metadataExists = () => {
   return existsSync(DATA_PATH)
@@ -24,3 +25,8 @@ export const writeCache = (cache) => {
   writeFileSync(CACHE_PATH, JSON.stringify(cache))
 }
 
+export const readBlacklist = () => {
+  return readFileSync(BLACKLIST_PATH).toString()
+    .replace(/\r/g, '')
+    .split('\n')
+}
